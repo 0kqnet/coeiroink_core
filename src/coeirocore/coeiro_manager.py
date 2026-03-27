@@ -79,6 +79,7 @@ class EspnetModel:
             config_path,
             model_path,
             device=device,
+            dtype="float16",
             seed=0,
             # Only for FastSpeech & FastSpeech2 & VITS
             speed_control_alpha=speed_scale,
@@ -86,6 +87,7 @@ class EspnetModel:
             noise_scale=0.333,
             noise_scale_dur=0.333,
         )
+
 
         with open(config_path) as f:
             config = yaml.safe_load(f)
