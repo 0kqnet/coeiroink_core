@@ -154,7 +154,7 @@ class AudioManager:
     ):
         # speaker_load
         if f"{style_id}-{speed_scale}" not in self.cache_speaker_models:
-            if len(self.cache_speaker_models) >= 16:
+            if len(self.cache_speaker_models) >= 32:
                 self.cache_speaker_models.pop(list(self.cache_speaker_models.keys())[0])
             self.cache_speaker_models[f"{style_id}-{speed_scale}"] = EspnetModel(
                 model_path=self.meta_manager.id_model_map[style_id].model_path,
