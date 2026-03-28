@@ -1,6 +1,7 @@
 import glob
 import json
 import logging
+import os
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -132,6 +133,7 @@ class AudioManager:
         self.previous_style_id = self.meta_manager.get_metas_dict()[0]['styles'][0]['id']
         self.previous_speed_scale = 1.0
         self.cache_speaker_models = OrderedDict()
+        self.max_cache_size = int(os.environ.get("COEIRO_MODEL_CACHE_SIZE", "32"))
 
         self.cache_speaker_models[f"{self.previous_style_id}-{self.previous_speed_scale}"] = EspnetModel(
             model_path=self.meta_manager.id_model_map[self.previous_style_id].model_path,
@@ -157,7 +159,7 @@ class AudioManager:
         if cache_key in self.cache_speaker_models:
             self.cache_speaker_models.move_to_end(cache_key)
         else:
-            if len(self.cache_speaker_models) >= 32:
+            if len(self.cache_speaker_models) >= self.max_cache_size:
                 self.cache_speaker_models.popitem(last=False)
             self.cache_speaker_models[cache_key] = EspnetModel(
                 model_path=self.meta_manager.id_model_map[style_id].model_path,
