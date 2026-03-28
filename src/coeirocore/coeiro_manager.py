@@ -133,7 +133,7 @@ class AudioManager:
         self.previous_style_id = self.meta_manager.get_metas_dict()[0]['styles'][0]['id']
         self.previous_speed_scale = 1.0
         self.cache_speaker_models = OrderedDict()
-        self.max_cache_size = int(os.environ.get("COEIRO_MODEL_CACHE_SIZE", "32"))
+        self.max_cache_size = int(os.environ.get("COEIROINK_MODEL_CACHE_SIZE", "32"))
 
         self.cache_speaker_models[f"{self.previous_style_id}-{self.previous_speed_scale}"] = EspnetModel(
             model_path=self.meta_manager.id_model_map[self.previous_style_id].model_path,
