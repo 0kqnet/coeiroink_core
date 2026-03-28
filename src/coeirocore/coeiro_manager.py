@@ -5,13 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Iterable, Union, Dict
 
-import librosa
 import numpy as np
 import pyworld as pw
-import resampy
 import sklearn.neighbors._partition_nodes
 import sklearn.utils._typedefs
 import torch
+import torchaudio.functional as F
 import yaml
 from espnet2.bin.tts_inference import Text2Speech
 from espnet2.text.phoneme_tokenizer import pyopenjtalk_g2p_prosody
@@ -186,8 +185,12 @@ class AudioManager:
         return wav
 
     @staticmethod
-    def trim(wav):
-        return librosa.effects.trim(wav, top_db=30)[0]
+    def trim(wav, top_db=30):
+        threshold = 10 ** (-top_db / 20) * np.max(np.abs(wav))
+        above = np.where(np.abs(wav) > threshold)[0]
+        if len(above) == 0:
+            return wav[:0]
+        return wav[above[0]:above[-1] + 1]
 
     @staticmethod
     def volume(wav, volume_scale):
@@ -215,18 +218,14 @@ class AudioManager:
 
     @staticmethod
     def resampling(wav, fs, output_sampling_rate):
-        return resampy.resample(
-            wav,
-            fs,
-            output_sampling_rate,
-            filter="kaiser_fast",
-        )
+        wav_tensor = torch.from_numpy(wav).unsqueeze(0)
+        resampled = F.resample(wav_tensor, fs, output_sampling_rate)
+        return resampled.squeeze(0).numpy()
 
-    # https://github.com/JeremyCCHsu/Python-Wrapper-for-World-Vocoder/blob/3a7c99a32c717deb8e66bde64b5e60b1a4afce79/demo/demo.py
     @staticmethod
     def get_world(x, fs):
-        _f0_h, t_h = pw.harvest(x, fs)
-        f0_h = pw.stonemask(x, _f0_h, t_h, fs)
-        sp_h = pw.cheaptrick(x, f0_h, t_h, fs)
-        ap_h = pw.d4c(x, f0_h, t_h, fs)
-        return f0_h, sp_h, ap_h
+        _f0, t = pw.dio(x, fs)
+        f0 = pw.stonemask(x, _f0, t, fs)
+        sp = pw.cheaptrick(x, f0, t, fs)
+        ap = pw.d4c(x, f0, t, fs)
+        return f0, sp, ap
