@@ -1,6 +1,7 @@
 import glob
 import json
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Iterable, Union, Dict
@@ -130,7 +131,7 @@ class AudioManager:
         self.meta_manager = MetaManager()
         self.previous_style_id = self.meta_manager.get_metas_dict()[0]['styles'][0]['id']
         self.previous_speed_scale = 1.0
-        self.cache_speaker_models = {}
+        self.cache_speaker_models = OrderedDict()
 
         self.cache_speaker_models[f"{self.previous_style_id}-{self.previous_speed_scale}"] = EspnetModel(
             model_path=self.meta_manager.id_model_map[self.previous_style_id].model_path,
@@ -152,19 +153,20 @@ class AudioManager:
             output_sampling_rate: int = 44100
     ):
         # speaker_load
-        if f"{style_id}-{speed_scale}" not in self.cache_speaker_models:
+        cache_key = f"{style_id}-{speed_scale}"
+        if cache_key in self.cache_speaker_models:
+            self.cache_speaker_models.move_to_end(cache_key)
+        else:
             if len(self.cache_speaker_models) >= 32:
-                self.cache_speaker_models.pop(list(self.cache_speaker_models.keys())[0])
-            self.cache_speaker_models[f"{style_id}-{speed_scale}"] = EspnetModel(
+                self.cache_speaker_models.popitem(last=False)
+            self.cache_speaker_models[cache_key] = EspnetModel(
                 model_path=self.meta_manager.id_model_map[style_id].model_path,
                 config_path=self.meta_manager.id_model_map[style_id].config_path,
                 speed_scale=1/speed_scale,
                 use_gpu=self.use_gpu
             )
-            self.previous_style_id = style_id
-            self.previous_speed_scale = speed_scale
 
-        current_speaker_model = self.cache_speaker_models[f"{style_id}-{speed_scale}"]
+        current_speaker_model = self.cache_speaker_models[cache_key]
 
         # synthesis
         if not isinstance(text, str):
