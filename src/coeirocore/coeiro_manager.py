@@ -212,7 +212,11 @@ class AudioManager:
             s = f0.std()
             f0_tmp = (f0 - m) / s
             f0 = (f0_tmp * (s * intonation_scale)) + m
-        return pw.synthesize(f0, sp, ap, fs).astype(np.float32)
+        result = pw.synthesize(f0, sp, ap, fs).astype(np.float32)
+        max_amp = np.max(np.abs(result))
+        if max_amp > 1.0:
+            result /= max_amp
+        return result
 
     @staticmethod
     def sil(wav, fs, pre_phoneme_length, post_phoneme_length):
