@@ -229,8 +229,9 @@ class AudioManager:
     # https://github.com/JeremyCCHsu/Python-Wrapper-for-World-Vocoder/blob/3a7c99a32c717deb8e66bde64b5e60b1a4afce79/demo/demo.py
     @staticmethod
     def get_world(x, fs):
-        _f0_h, t_h = pw.harvest(x, fs)
+        _f0_h, t_h = pw.dio(x, fs)
         f0_h = pw.stonemask(x, _f0_h, t_h, fs)
         sp_h = pw.cheaptrick(x, f0_h, t_h, fs)
         ap_h = pw.d4c(x, f0_h, t_h, fs)
         return f0_h, sp_h, ap_h
+        return f0, sp, ap
