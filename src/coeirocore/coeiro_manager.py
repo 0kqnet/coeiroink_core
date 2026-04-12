@@ -80,7 +80,7 @@ class EspnetModel:
             config_path,
             model_path,
             device=device,
-            dtype="float16",
+            dtype="float32",
             seed=0,
             # Only for FastSpeech & FastSpeech2 & VITS
             speed_control_alpha=speed_scale,
