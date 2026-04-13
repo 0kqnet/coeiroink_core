@@ -2,6 +2,7 @@ import glob
 import json
 import logging
 import os
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,7 +73,6 @@ class EspnetModel:
             self,
             config_path: Path,
             model_path: Path,
-            speed_scale=1.0,
             use_gpu=False
     ):
         device = 'cuda' if use_gpu else 'cpu'
@@ -83,12 +83,11 @@ class EspnetModel:
             dtype="float32",
             seed=0,
             # Only for FastSpeech & FastSpeech2 & VITS
-            speed_control_alpha=speed_scale,
+            speed_control_alpha=1.0,
             # Only for VITS
             noise_scale=0.333,
             noise_scale_dur=0.333,
         )
-
 
         with open(config_path) as f:
             config = yaml.safe_load(f)
@@ -110,10 +109,13 @@ class EspnetModel:
     def make_voice(
             self,
             text: Union[str, torch.Tensor, np.ndarray],
+            speed_scale: float = 1.0,
             seed: int = 0
     ) -> np.ndarray:
         np.random.seed(seed)
         torch.manual_seed(seed)
+        # ESPnetのspeed_control_alphaは長さ係数(大きいほど遅い)のため逆数を設定
+        self.tts_model.speed_control_alpha = 1 / speed_scale
         output = self.tts_model(text)
         wav = output["wav"]
         wav = wav.view(-1).cpu().numpy()
@@ -130,15 +132,14 @@ class AudioManager:
         self.use_gpu = use_gpu
 
         self.meta_manager = MetaManager()
-        self.previous_style_id = self.meta_manager.get_metas_dict()[0]['styles'][0]['id']
-        self.previous_speed_scale = 1.0
+        initial_style_id = self.meta_manager.get_metas_dict()[0]['styles'][0]['id']
         self.cache_speaker_models = OrderedDict()
         self.max_cache_size = int(os.environ.get("COEIROINK_MODEL_CACHE_SIZE", "32"))
+        self.cache_lock = threading.Lock()
 
-        self.cache_speaker_models[f"{self.previous_style_id}-{self.previous_speed_scale}"] = EspnetModel(
-            model_path=self.meta_manager.id_model_map[self.previous_style_id].model_path,
-            config_path=self.meta_manager.id_model_map[self.previous_style_id].config_path,
-            speed_scale=self.previous_speed_scale,
+        self.cache_speaker_models[initial_style_id] = EspnetModel(
+            model_path=self.meta_manager.id_model_map[initial_style_id].model_path,
+            config_path=self.meta_manager.id_model_map[initial_style_id].config_path,
             use_gpu=self.use_gpu
         )
 
@@ -155,25 +156,25 @@ class AudioManager:
             output_sampling_rate: int = 44100
     ):
         # speaker_load
-        cache_key = f"{style_id}-{speed_scale}"
-        if cache_key in self.cache_speaker_models:
-            self.cache_speaker_models.move_to_end(cache_key)
-        else:
-            if len(self.cache_speaker_models) >= self.max_cache_size:
-                self.cache_speaker_models.popitem(last=False)
-            self.cache_speaker_models[cache_key] = EspnetModel(
-                model_path=self.meta_manager.id_model_map[style_id].model_path,
-                config_path=self.meta_manager.id_model_map[style_id].config_path,
-                speed_scale=1/speed_scale,
-                use_gpu=self.use_gpu
-            )
-
-        current_speaker_model = self.cache_speaker_models[cache_key]
+        with self.cache_lock:
+            if style_id in self.cache_speaker_models:
+                self.cache_speaker_models.move_to_end(style_id)
+            else:
+                if len(self.cache_speaker_models) >= self.max_cache_size:
+                    self.cache_speaker_models.popitem(last=False)
+                self.cache_speaker_models[style_id] = EspnetModel(
+                    model_path=self.meta_manager.id_model_map[style_id].model_path,
+                    config_path=self.meta_manager.id_model_map[style_id].config_path,
+                    use_gpu=self.use_gpu
+                )
+            current_speaker_model = self.cache_speaker_models[style_id]
 
         # synthesis
         if not isinstance(text, str):
             text = current_speaker_model.tokens2ids(text)
-        wav = current_speaker_model.make_voice(text)
+        # speed_control_alpha書き換えは非スレッドセーフのためロックで保護
+        with self.cache_lock:
+            wav = current_speaker_model.make_voice(text, speed_scale=speed_scale)
 
         # post-processing
         wav = self.trim(wav)
