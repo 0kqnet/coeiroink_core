@@ -114,9 +114,10 @@ class EspnetModel:
     ) -> np.ndarray:
         np.random.seed(seed)
         torch.manual_seed(seed)
-        # ESPnetのspeed_control_alphaは長さ係数(大きいほど遅い)のため逆数を設定
-        self.tts_model.speed_control_alpha = 1 / speed_scale
-        output = self.tts_model(text)
+        # ESPnetのalphaは長さ係数(大きいほど遅い)のためspeed_scaleの逆数を渡す。
+        # Text2Speechはspeed_control_alphaを__init__時にdecode_confへ焼き付けるため、
+        # 推論時はdecode_confパラメータでオーバーライドする必要がある。
+        output = self.tts_model(text, decode_conf={"alpha": 1 / speed_scale})
         wav = output["wav"]
         wav = wav.view(-1).cpu().numpy()
         return wav
@@ -172,9 +173,7 @@ class AudioManager:
         # synthesis
         if not isinstance(text, str):
             text = current_speaker_model.tokens2ids(text)
-        # speed_control_alpha書き換えは非スレッドセーフのためロックで保護
-        with self.cache_lock:
-            wav = current_speaker_model.make_voice(text, speed_scale=speed_scale)
+        wav = current_speaker_model.make_voice(text, speed_scale=speed_scale)
 
         # post-processing
         wav = self.trim(wav)
